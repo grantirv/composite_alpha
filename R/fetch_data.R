@@ -5,10 +5,10 @@ MP <- "G:/Depts/EQUITY/4fquant/data/mosaic2.3/model_data/fr26/date-rgn-gics1/dat
 # fetch analyst views
   av <- fread("data/analyst_ranks_raw.csv")
   av <- av[, .(
-    date = effective_date,
-    dsseccode = sym::dsseccode(as.integer(dsinfocode)),
+    date = as.IDate(effective_date),
+    isin = isin,
     analyst = analyst_name,
-    rec = rec,
+    rec = ifelse(is.na(recommendation_value), 1, recommendation_value),
     rank = rank
   )]
   av <- unique(av)
@@ -32,10 +32,12 @@ MP <- "G:/Depts/EQUITY/4fquant/data/mosaic2.3/model_data/fr26/date-rgn-gics1/dat
   )
   bt::write_btd(btd, "data/btd.fst")
   btd <- bt::read_btd("data/btd.fst")
-  esr_rtn <- btd[, .(dsseccode, date, esr = fv, fwd_rtn)]
+  btd[, isin := sym::isin(dsseccode, date = date[1]), by = date]
+  btd <- btd[!is.na(isin)]
+  esr_rtn <- btd[, .(isin, date, esr = fv, fwd_rtn)]
   esr_rtn <- esr_rtn[date >= av[, min(date)]]
 
 # combine, roll recs fwd by max 1q
-  comp_data <- av[esr_rtn, on = .(dsseccode, date), roll = 92L]
+  comp_data <- av[esr_rtn, on = .(isin, date), roll = 92L]
   comp_data[is.na(rec), rec := 0L]
   fst::write_fst(comp_data, "data/comp_data.fst")
