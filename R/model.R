@@ -1,15 +1,65 @@
 d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
 
-# normalize, annualize and put on same units
+# convert to quarterly log returns
+  d[, fwd_rtn := log(1 + fwd_rtn)]
+  d[, esr := log((1 + esr/100)^0.5)]
+  
+# demean fwd_rtn & esr by date
   d[, fwd_rtn := fwd_rtn - mean(fwd_rtn), by = date]
-  d[, fwd_rtn := (fwd_rtn + 1)^4 - 1]
-  d[, fwd_rtn := fwd_rtn * 100]
-  d[, esr := ((esr/100 + 1)^2 - 1) * 100]
+  d[, esr := esr - mean(esr, na.rm = TRUE), by = date]
 
 # split esr into pos and negative for kinked model
   d[, esr_pos := pmax(0, esr)]
+  d[, esr_neg := pmin(0, esr)]
 
-m <- lm(fwd_rtn ~ esr + rec, data = d)
+# convert rec to match returns (easier interpretation)
+  d[, rec := rec/100]
+
+# fit model
+  m1 <- lm(fwd_rtn ~ 0 + esr + rec, data = d)
+  m2 <- lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec, data = d)
+
+# summarize results
+  summary(m1)
+  summary(m2)
+
+# plot predictions
+  MINTY <- rgb(137/255, 192/255, 174/255)
+  coef <- m2$coefficients
+  d[, esr_ctb := ifelse(esr > 0, esr_pos * coef['esr_pos'], esr_neg * coef['esr_neg'])]
+  d[, rec_ctb := rec * coef['rec']]
+  pd <- d[date == max(date), .(esr, esr_ctb, rec_ctb, buy = rec > 0)]
+
+  library(ggplot2)
+  p <- ggplot(pd, aes(x = esr, y = esr_ctb))
+  p <- p + geom_line()
+  p <- p + geom_linerange(
+    mapping = aes(x = esr, ymin = esr_ctb, ymax = esr_ctb + rec_ctb),
+    data = pd[rec_ctb != 0],
+    colour = MINTY
+  )
+  p <- p + geom_point(
+    mapping = aes(x = esr, y = esr_ctb + rec_ctb),
+    data = pd[rec_ctb != 0],
+    colour = MINTY
+  )
+
+  p <- p + xlim(-0.05, 0.05)
+
+
+
+  p <- p + geom_col() + xlim(-0.02, 0.05)
+
+
+    geom_line(aes(y = pred1), color = "blue") +
+    geom_line(aes(y = pred2), color = "red") +
+    labs(title = "Predicted vs Actual Forward Returns",
+         x = "Earnings Surprise (ESR)",
+         y = "Forward Log Return") +
+    theme_minimal()
+
+
+
 
 
 # check coverage
