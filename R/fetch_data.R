@@ -2,23 +2,18 @@ require(data.table)
 
 MP <- "G:/Depts/EQUITY/4fquant/data/mosaic2.3/model_data/fr26/date-rgn-gics1/date-rgn-gics1/models"
 
-# fetch analyst data
-  cn <- DBI::dbConnect(odbc::odbc(), "Databricks")
-  sql <- "select * from f4.analysts.analyst_scores"
-  analyst_scores <- DBI::dbGetQuery(cn, sql) |> as.data.table()
-  fst::write_fst(analyst_scores, "data/analyst_scores.fst")
-  analyst_scores <- fst::read_fst("data/analyst_scores.fst", as.data.table = TRUE)
-
-# create recommendation data
-  recs <- analyst_scores[, .(
-    date = declaration_date,
+# fetch analyst views
+  av <- fread("data/analyst_ranks_raw.csv")
+  av <- av[, .(
+    date = effective_date,
     dsseccode = sym::dsseccode(as.integer(dsinfocode)),
     analyst = analyst_name,
-    rec = rec
+    rec = rec,
+    rank = rank
   )]
-  recs <- unique(recs)
-  fst::write_fst(recs, "data/recs.fst")
-  recs <- fst::read_fst("data/recs.fst", as.data.table = TRUE)
+  av <- unique(av)
+  fst::write_fst(av, "data/av.fst")
+  av <- fst::read_fst("data/av.fst", as.data.table = TRUE)
 
 # get esr & rtns
   btd <- btd::f4_btd(
@@ -38,9 +33,9 @@ MP <- "G:/Depts/EQUITY/4fquant/data/mosaic2.3/model_data/fr26/date-rgn-gics1/dat
   bt::write_btd(btd, "data/btd.fst")
   btd <- bt::read_btd("data/btd.fst")
   esr_rtn <- btd[, .(dsseccode, date, esr = fv, fwd_rtn)]
-  esr_rtn <- esr_rtn[date >= recs[, min(date)]]
+  esr_rtn <- esr_rtn[date >= av[, min(date)]]
 
 # combine, roll recs fwd by max 1q
-  comp_data <- recs[esr_rtn, on = .(dsseccode, date), roll = 92L]
+  comp_data <- av[esr_rtn, on = .(dsseccode, date), roll = 92L]
   comp_data[is.na(rec), rec := 0L]
   fst::write_fst(comp_data, "data/comp_data.fst")

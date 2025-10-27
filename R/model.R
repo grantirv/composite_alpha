@@ -1,8 +1,8 @@
 d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
 
-# convert to quarterly log returns
-  d[, fwd_rtn := log(1 + fwd_rtn)]
-  d[, esr := log((1 + esr/100)^0.5)]
+# convert to log returns
+  d[, fwd_rtn := log(1 + fwd_rtn) * 100]
+  d[, esr := log((1 + esr/100)) * 100]
   
 # demean fwd_rtn & esr by date
   d[, fwd_rtn := fwd_rtn - mean(fwd_rtn), by = date]
@@ -12,12 +12,20 @@ d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
   d[, esr_pos := pmax(0, esr)]
   d[, esr_neg := pmin(0, esr)]
 
-# convert rec to match returns (easier interpretation)
-  d[, rec := rec/100]
+# calculate conviction score for each analyst
+  d[, conv := conviction_score(rank), by = .(date, analyst)]
+
+# remove return outliers
+  d <- d[fwd_rtn > -100 & fwd_rtn < 100]
 
 # fit model
-  m1 <- lm(fwd_rtn ~ 0 + esr + rec, data = d)
-  m2 <- lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec, data = d)
+  models <- list(
+    m1 = lm(fwd_rtn ~ 0 + esr, data = d),
+    m2 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg, data = d),
+    m3 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec, data = d),
+    m4 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec + conv, data = d)
+  )
+  
 
 # summarize results
   summary(m1)
