@@ -1,3 +1,7 @@
+require(data.table)
+require(ggplot2)
+source("R/utils.R")
+
 d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
 
 # convert to log returns
@@ -31,32 +35,36 @@ d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
     m5 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + buy + sell + conv, data = d)
   )
   
-# summarize results
-  summary(m1)
-  summary(m2)
 
 # plot predictions
   MINTY <- rgb(137/255, 192/255, 174/255)
-  coef <- m2$coefficients
+  coef <- models$m3$coefficients
   d[, esr_ctb := ifelse(esr > 0, esr_pos * coef['esr_pos'], esr_neg * coef['esr_neg'])]
-  d[, rec_ctb := rec * coef['rec']]
-  pd <- d[date == max(date), .(esr, esr_ctb, rec_ctb, buy = rec > 0)]
+  d[, buy_ctb := buy * coef['buy']]
+  pd <- d[date == max(date), .(esr, esr_ctb, buy_ctb, buy = rec > 0)]
 
   library(ggplot2)
   p <- ggplot(pd, aes(x = esr, y = esr_ctb))
   p <- p + geom_line()
   p <- p + geom_linerange(
-    mapping = aes(x = esr, ymin = esr_ctb, ymax = esr_ctb + rec_ctb),
-    data = pd[rec_ctb != 0],
+    mapping = aes(x = esr, ymin = esr_ctb, ymax = esr_ctb + buy_ctb),
+    data = pd[buy_ctb != 0],
     colour = MINTY
   )
   p <- p + geom_point(
-    mapping = aes(x = esr, y = esr_ctb + rec_ctb),
-    data = pd[rec_ctb != 0],
+    mapping = aes(x = esr, y = esr_ctb + buy_ctb),
+    data = pd[buy_ctb != 0],
     colour = MINTY
   )
 
-  p <- p + xlim(-0.05, 0.05)
+  p <- p + xlim(-20, 10) + ylim(-20, 10)
+
+  p <- p + labs(
+    x = "ESR (%)",
+    y = "Expected Return (%) 6m Forward"
+  )
+
+  ggsave("output/expected_returns.png", plot = p, width = 8, height = 8, scale = 1)
 
 
 
