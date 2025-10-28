@@ -4,6 +4,9 @@ d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
   d[, fwd_rtn := log(1 + fwd_rtn) * 100]
   d[, esr := log((1 + esr/100)) * 100]
   
+# remove return outliers
+  d <- d[fwd_rtn > -100 & fwd_rtn < 100]
+
 # demean fwd_rtn & esr by date
   d[, fwd_rtn := fwd_rtn - mean(fwd_rtn), by = date]
   d[, esr := esr - mean(esr, na.rm = TRUE), by = date]
@@ -15,18 +18,19 @@ d <- fst::read_fst("data/comp_data.fst", as.data.table = TRUE)
 # calculate conviction score for each analyst
   d[, conv := conviction_score(rank), by = .(date, analyst)]
 
-# remove return outliers
-  d <- d[fwd_rtn > -100 & fwd_rtn < 100]
+# separate recommendations into buys and sells
+  d[, buy := ifelse(rec == 1, 1, 0)]
+  d[, sell := ifelse(rec == -1, 1, 0)]
 
 # fit model
   models <- list(
     m1 = lm(fwd_rtn ~ 0 + esr, data = d),
     m2 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg, data = d),
-    m3 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec, data = d),
-    m4 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + rec + conv, data = d)
+    m3 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + buy, data = d),
+    m4 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + buy + sell, data = d),
+    m5 = lm(fwd_rtn ~ 0 + esr_pos + esr_neg + buy + sell + conv, data = d)
   )
   
-
 # summarize results
   summary(m1)
   summary(m2)
